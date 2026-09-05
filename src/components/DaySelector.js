@@ -72,4 +72,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default DaySelector;
+export default React.memo(DaySelector);

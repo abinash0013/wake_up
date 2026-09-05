@@ -186,7 +186,8 @@ const AlarmFormModal = ({
     <AppModal visible={visible} onClose={onClose}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled">
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag">
         <Text style={styles.title}>
           {mode === 'create' ? 'New Alarm' : 'Edit Alarm'}
         </Text>
@@ -293,12 +294,12 @@ const AlarmFormModal = ({
             title="Cancel"
             variant="danger"
             onPress={onClose}
-            style={styles.actionButton}
+            style={[styles.actionButton, styles.flatButton]}
           />
           <AppButton
             title={mode === 'create' ? 'Add Alarm' : 'Save Alarm'}
             onPress={handleSave}
-            style={styles.actionButton}
+            style={[styles.actionButton, styles.flatButton]}
           />
         </View>
       </ScrollView>
@@ -438,6 +439,10 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+  },
+  flatButton: {
+    shadowOpacity: 0,
+    elevation: 0,
   },
 });
 

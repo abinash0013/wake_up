@@ -130,7 +130,7 @@ const StepConfigModal = ({visible, initialStep = null, onSave, onClose}) => {
           title="Cancel"
           variant="danger"
           onPress={onClose}
-          style={styles.actionButton}
+          style={[styles.actionButton, styles.flatButton]}
         />
         <AppButton
           title="Save Step"
@@ -196,6 +196,10 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
+  },
+  flatButton: {
+    shadowOpacity: 0,
+    elevation: 0,
   },
 });
 
