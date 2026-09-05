@@ -19,3 +19,20 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// react-native-google-fit resolves these as "+" which now picks up
+// play-services 22.x where GoogleSignIn was removed, failing javac.
+// Also pin kotlin-stdlib: a newer transitive resolves to 2.1.20 which the
+// project's Kotlin 1.9 compiler cannot read.
+allprojects {
+  configurations.all {
+    resolutionStrategy {
+      force 'com.google.android.gms:play-services-auth:21.2.0'
+      force 'com.google.android.gms:play-services-fitness:21.1.0'
+      force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
+      force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24'
+      force 'androidx.appcompat:appcompat:1.6.1'
+      force 'androidx.core:core:1.13.0'
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import React from 'react';
-import {Modal, View, Text, Button} from 'react-native';
+import {Modal, Text, View} from 'react-native';
 
 const AlarmModal = ({stepsTaken, isWalking, startsStepCounter, stopAlarm}) => (
   <Modal

@@ -10,8 +10,13 @@ import App from '../App';
 import {it} from '@jest/globals';
 
 // Note: test renderer must be required after react-native.
-import renderer from 'react-test-renderer';
+import renderer, {act} from 'react-test-renderer';
 
-it('renders correctly', () => {
-  renderer.create(<App />);
+it('renders correctly', async () => {
+  const tree = renderer.create(<App />);
+  // Flush the async alarm-loading/saving effects before asserting.
+  await act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+  tree.unmount();
 });

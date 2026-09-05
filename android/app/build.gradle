@@ -92,23 +92,24 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
-        release {
-            // storeFile file MYAPP_RELEASE_STORE_FILE // path to your keystore
-            // storePassword MYAPP_RELEASE_STORE_PASSWORD // keystore password
-            // keyAlias MYAPP_RELEASE_KEY_ALIAS // alias of your key
-            // keyPassword MYAPP_RELEASE_KEY_PASSWORD // key password
-            storeFile file ('my-release-key.keystore') // path to your keystore
-            storePassword '111111' // keystore password
-            keyAlias 'my-key' // alias of your key
-            keyPassword '111111' // key password
-        }
+        // release {
+        //     // storeFile file MYAPP_RELEASE_STORE_FILE // path to your keystore
+        //     // storePassword MYAPP_RELEASE_STORE_PASSWORD // keystore password
+        //     // keyAlias MYAPP_RELEASE_KEY_ALIAS // alias of your key
+        //     // keyPassword MYAPP_RELEASE_KEY_PASSWORD // key password
+        //     storeFile file ('my-release-key.keystore') // path to your keystore
+        //     storePassword '111111' // keystore password
+        //     keyAlias 'my-key' // alias of your key
+        //     keyPassword '111111' // key password
+        // }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            signingConfig signingConfigs.release
+            // signingConfig signingConfigs.release
+            signingConfig signingConfigs.debug
             // Enable Proguard for release builds (if required)
             minifyEnabled true // to shrink and obfuscate code
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro' // Proguard rules
