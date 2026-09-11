@@ -6,4 +6,12 @@
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
     </style>
 
+    <!-- Full-screen theme for the alarm dismiss popup shown on the lock screen. -->
+    <style name="AlarmDismissTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowBackground">@color/alarm_dismiss_background</item>
+        <item name="android:statusBarColor">@color/alarm_dismiss_background</item>
+        <item name="android:navigationBarColor">@color/alarm_dismiss_background</item>
+    </style>
+
 </resources>

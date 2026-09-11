@@ -2,6 +2,7 @@ import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {colors, radii, shadows, spacing, typography} from '../theme';
 import {getStepType} from '../utils/steps';
+import {showToast} from '../utils/toast';
 import AppButton from './ui/AppButton';
 import StatusBadge from './ui/StatusBadge';
 
@@ -49,9 +50,15 @@ const ActiveAlarmOverlay = ({
         )}
 
         <AppButton
-          title="Stop Alarm"
-          variant="danger"
-          onPress={onStop}
+          title={activeStep ? 'Start Walking' : 'Stop Alarm'}
+          variant={activeStep ? 'primary' : 'danger'}
+          onPress={() => {
+            if (activeStep) {
+              showToast(`Walk ${target} steps to dismiss the alarm!`);
+            } else {
+              onStop();
+            }
+          }}
           style={styles.stopButton}
         />
       </View>

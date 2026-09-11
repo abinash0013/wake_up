@@ -3,6 +3,18 @@ import {Alert, Vibration} from 'react-native';
 import BackgroundTimer from 'react-native-background-timer';
 import useStepCounter from './useStepCounter';
 import {playAlarmSound, stopAlarmSound} from '../services/alarmSound';
+import {
+  addAlarmFiredListener,
+  addAlarmStoppedListener,
+  addStepProgressListener,
+  cancelRingingNotification,
+  getRingingAlarm,
+  requestNotificationPermission,
+} from '../services/alarmNotification';
+import {
+  isNativeSchedulerAvailable,
+  stopRingingService,
+} from '../services/nativeAlarmScheduler';
 import {getEnabledSteps} from '../utils/steps';
 import {formatTime} from '../utils/time';
 import {isTodayIncluded} from '../utils/days';
@@ -18,6 +30,7 @@ const useAlarmEngine = ({alarms, toggleAlarm}) => {
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [stepProgress, setStepProgress] = useState(0);
   const [shouldHideDelete, setShouldHideDelete] = useState(false);
+  const [nativeWalking, setNativeWalking] = useState(false);
 
   const alarmsRef = useRef(alarms);
   const activeAlarmIdRef = useRef(activeAlarmId);
@@ -41,10 +54,13 @@ const useAlarmEngine = ({alarms, toggleAlarm}) => {
     }
     Vibration.cancel();
     await stopAlarmSound();
+    cancelRingingNotification();
+    stopRingingService();
     setActiveAlarmId(null);
     setActiveStepIndex(0);
     setStepProgress(0);
     setShouldHideDelete(false);
+    setNativeWalking(false);
     ringInProgressRef.current = false;
     console.log('Alarm stopped');
     showToast('Alarm stopped!');
@@ -66,7 +82,11 @@ const useAlarmEngine = ({alarms, toggleAlarm}) => {
         Vibration.vibrate(ALARM_VIBRATION_PATTERN, true);
       }
 
-      await playAlarmSound(alarm.sound?.uri);
+      try {
+        await playAlarmSound(alarm.sound?.uri);
+      } catch (error) {
+        console.warn('Failed to play alarm sound', error);
+      }
       // Disable the alarm after it rings (matches previous behaviour).
       toggleAlarm(alarm.id);
 
@@ -117,7 +137,11 @@ const useAlarmEngine = ({alarms, toggleAlarm}) => {
   );
 
   useStepCounter({
-    active: !!activeAlarm && !!activeStep && activeStep.type === 'steps',
+    active:
+      !!activeAlarm &&
+      !!activeStep &&
+      activeStep.type === 'steps' &&
+      !nativeWalking,
     threshold: activeStep?.config.threshold,
     minIntervalMs: activeStep?.config.minIntervalMs,
     onStep,
@@ -138,11 +162,91 @@ const useAlarmEngine = ({alarms, toggleAlarm}) => {
   }, [ringAlarm]);
 
   useEffect(() => {
+    if (isNativeSchedulerAvailable) {
+      return undefined;
+    }
     const intervalId = BackgroundTimer.setInterval(() => {
       checkAlarms();
     }, 1000);
     return () => BackgroundTimer.clearInterval(intervalId);
   }, [checkAlarms]);
+
+  // On Android the AlarmManager/ringing service drives ringing (works even
+  // when the app is killed). JS only needs to reflect it in the UI.
+  useEffect(() => {
+    return addAlarmFiredListener(payload => {
+      const alarm = alarmsRef.current.find(
+        item => item.id === payload?.id,
+      );
+      if (!alarm || ringInProgressRef.current) {
+        return;
+      }
+      ringInProgressRef.current = true;
+      setActiveAlarmId(alarm.id);
+      setActiveStepIndex(0);
+      const walking = !!(payload?.walking && payload.walkTarget > 0);
+      setNativeWalking(walking);
+      setStepProgress(payload?.walked || 0);
+      setShouldHideDelete(true);
+      toggleAlarm(alarm.id);
+    });
+  }, [toggleAlarm]);
+
+  // A walking alarm started natively: reflect the step count in the UI and
+  // stop when the native step counter reaches the target.
+  useEffect(() => {
+    return addStepProgressListener(payload => {
+      const alarm = alarmsRef.current.find(
+        item => item.id === payload?.id,
+      );
+      if (!alarm || !ringInProgressRef.current) {
+        return;
+      }
+      setStepProgress(payload.walked || 0);
+      if (payload.target > 0 && payload.walked >= payload.target) {
+        stopAlarm();
+      }
+    });
+  }, [stopAlarm]);
+
+  // Stop the alarm when it is dismissed from the native popup/notification.
+  useEffect(() => {
+    return addAlarmStoppedListener(() => {
+      stopAlarm();
+    });
+  }, [stopAlarm]);
+
+  // When the alarm fired while the app was killed, the AlarmFired event never
+  // reached JS. Re-query the native ringing service on mount and restore the
+  // UI/step-counting state so "Start Walking" works after the app is opened.
+  useEffect(() => {
+    let cancelled = false;
+    getRingingAlarm().then(payload => {
+      if (cancelled || !payload?.id || ringInProgressRef.current) {
+        return;
+      }
+      const alarm = alarmsRef.current.find(item => item.id === payload.id);
+      if (!alarm) {
+        return;
+      }
+      ringInProgressRef.current = true;
+      setActiveAlarmId(alarm.id);
+      setActiveStepIndex(0);
+      setStepProgress(payload.walked || 0);
+      setNativeWalking(!!(payload.walking && payload.walkTarget > 0));
+      setShouldHideDelete(true);
+      toggleAlarm(alarm.id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [toggleAlarm]);
+
+  // Ask for notification permission up-front so the native alarm popup can
+  // appear later even when the app is closed.
+  useEffect(() => {
+    requestNotificationPermission();
+  }, []);
 
   return {
     activeAlarmId,

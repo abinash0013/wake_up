@@ -7,7 +7,11 @@ import com.facebook.react.uimanager.ViewManager
 
 class AlarmSoundPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
-    listOf(AlarmSoundModule(reactContext))
+    listOf(
+      AlarmSoundModule(reactContext),
+      AlarmNotificationModule(reactContext),
+      AlarmSchedulerManager(reactContext),
+    )
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
     emptyList()

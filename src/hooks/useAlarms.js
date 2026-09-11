@@ -5,6 +5,7 @@ import {normalizeSteps} from '../utils/steps';
 import {normalizeRepeatDays} from '../utils/days';
 import {currentWeekday} from '../utils/time';
 import {DEFAULT_SOUND} from '../constants/sound';
+import {syncNativeAlarms} from '../services/nativeAlarmScheduler';
 
 const normalizeSound = sound => {
   if (sound && typeof sound.uri === 'string' && sound.uri.length > 0) {
@@ -55,6 +56,9 @@ const useAlarms = () => {
       clearTimeout(saveTimerRef.current);
     }
     saveTimerRef.current = setTimeout(() => saveAlarms(alarms), 200);
+    // Keep the OS-level (AlarmManager) schedule in sync so alarms fire even
+    // when the app process is killed.
+    syncNativeAlarms(alarms);
     return () => {
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
