@@ -68,6 +68,7 @@ class AlarmDismissActivity : Activity() {
     findViewById<Button>(R.id.startWalkingButton).setOnClickListener {
       val remaining = (walkTarget - walked).coerceAtLeast(0)
       Toast.makeText(this, "Walk $remaining more steps!", Toast.LENGTH_SHORT).show()
+      openApp()
     }
     findViewById<Button>(R.id.stopAlarmButton).setOnClickListener { stopAndFinish() }
 
@@ -124,6 +125,17 @@ class AlarmDismissActivity : Activity() {
   private fun stopAndFinish() {
     AlarmRingingService.stop(applicationContext)
     finish()
+  }
+
+  // "Start Walking" brings the React app to the front so its step UI takes
+  // over the live count. This also recovers the app process after a kill
+  // without the user having to search for the icon. The alarm keeps ringing
+  // until the step target is reached.
+  private fun openApp() {
+    val intent = Intent(this, MainActivity::class.java).apply {
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    }
+    startActivity(intent)
   }
 
   companion object {

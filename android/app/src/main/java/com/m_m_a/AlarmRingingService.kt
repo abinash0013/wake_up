@@ -37,6 +37,11 @@ class AlarmRingingService : Service() {
     const val EXTRA_TARGET = "target"
     const val EXTRA_WALKING = "walking"
 
+    // Peak-detection tuning for the accelerometer fallback (mirrors the
+    // algorithm used by the JS useStepCounter hook).
+    private const val ACCEL_THRESHOLD = 2.5
+    private const val ACCEL_MIN_INTERVAL_MS = 300L
+
     private const val EXTRA_ALARM_JSON = AlarmScheduler.EXTRA_ALARM_JSON
 
     // Snapshot of the currently ringing alarm, exposed to JS via
@@ -65,7 +70,7 @@ class AlarmRingingService : Service() {
     val id: String,
     val time: String,
     val walkTarget: Int,
-    val walking: Boolean,
+    var walking: Boolean,
     var walked: Int,
   )
 
@@ -78,7 +83,11 @@ class AlarmRingingService : Service() {
   private var sensorManager: SensorManager? = null
   private var stepCounterSensor: Sensor? = null
   private var stepDetectorSensor: Sensor? = null
+  private var accelerometerSensor: Sensor? = null
   private var baseSteps = -1f
+  private var accelPreviousMagnitude = 0.0
+  private var accelPreviousTime = 0L
+  private var accelSteps = 0
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -97,13 +106,13 @@ class AlarmRingingService : Service() {
 
     // Walk steps are always required to dismiss when configured — the native
     // surfaces show "Start Walking" based on walkTarget > 0 in every state
-    // (foreground, background or killed). Whether the service itself can count
-    // steps depends on a hardware step sensor; when none is present the JS
-    // layer (accelerometer) takes over once the app is opened.
+    // (foreground, background or killed). Steps are counted by the service
+    // itself: it prefers the hardware step sensors and falls back to the
+    // accelerometer (no permission needed) so counting keeps working even in
+    // kill mode on devices without a step sensor.
     val target = parsed.walkTarget
     walkTarget = target
-    walking =
-      target > 0 && (stepCounterSensor != null || stepDetectorSensor != null || findStepSensor())
+    walking = target > 0 && findSensors()
     walked = 0
     currentRinging = RingingInfo(parsed.id, parsed.time, walkTarget, walking, walked)
 
@@ -159,24 +168,52 @@ class AlarmRingingService : Service() {
     return START_NOT_STICKY
   }
 
-  private fun findStepSensor(): Boolean {
+  private fun findSensors(): Boolean {
     val manager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
     sensorManager = manager
     stepCounterSensor = manager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
     stepDetectorSensor = manager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)
-    return stepCounterSensor != null || stepDetectorSensor != null
+    accelerometerSensor = manager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    return stepCounterSensor != null || stepDetectorSensor != null || accelerometerSensor != null
   }
 
   private fun startStepTracking() {
     val manager = sensorManager ?: return
+    // Prefer the hardware step sensors (most accurate); fall back through the
+    // list so a denied/absent sensor never leaves the alarm ringing with no
+    // way to count steps. The accelerometer requires no permission and exists
+    // on virtually every device, so kill-mode counting is self-sufficient.
+    var tracking = false
     try {
       if (stepCounterSensor != null) {
         manager.registerListener(stepListener, stepCounterSensor, SensorManager.SENSOR_DELAY_NORMAL)
-      } else if (stepDetectorSensor != null) {
-        manager.registerListener(detectListener, stepDetectorSensor, SensorManager.SENSOR_DELAY_NORMAL)
+        tracking = true
       }
-    } catch (ignored: SecurityException) {
-      Log.w(TAG, "Step sensor permission denied, JS fallback will be used")
+    } catch (e: SecurityException) {
+      Log.w(TAG, "Step counter permission denied, falling back", e)
+    }
+    if (!tracking) {
+      try {
+        if (stepDetectorSensor != null) {
+          manager.registerListener(detectListener, stepDetectorSensor, SensorManager.SENSOR_DELAY_NORMAL)
+          tracking = true
+        }
+      } catch (e: SecurityException) {
+        Log.w(TAG, "Step detector permission denied, falling back", e)
+      }
+    }
+    if (!tracking && accelerometerSensor != null) {
+      accelSteps = 0
+      accelPreviousTime = 0L
+      accelPreviousMagnitude = 0.0
+      manager.registerListener(accelListener, accelerometerSensor, SensorManager.SENSOR_DELAY_UI)
+      tracking = true
+      Log.i(TAG, "Using accelerometer fallback for step counting")
+    }
+    if (!tracking) {
+      walking = false
+      currentRinging?.walking = false
+      Log.w(TAG, "No sensor available, JS accelerometer fallback will be used")
     }
   }
 
@@ -195,6 +232,35 @@ class AlarmRingingService : Service() {
   private val detectListener = object : SensorEventListener {
     override fun onSensorChanged(event: SensorEvent) {
       onStepsChanged(walked + 1)
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+  }
+
+  // Peak detection on the accelerometer magnitude (no permission required).
+  // Used on devices without a hardware step sensor or when activity
+  // recognition was not granted, so the alarm can still be dismissed by
+  // walking while the app is killed.
+  private val accelListener = object : SensorEventListener {
+    override fun onSensorChanged(event: SensorEvent) {
+      val x = event.values[0].toDouble()
+      val y = event.values[1].toDouble()
+      val z = event.values[2].toDouble()
+      val magnitude = Math.sqrt(x * x + y * y + z * z)
+      val now = System.currentTimeMillis()
+      if (accelPreviousTime == 0L) {
+        accelPreviousTime = now
+        accelPreviousMagnitude = magnitude
+        return
+      }
+      if (magnitude - accelPreviousMagnitude > ACCEL_THRESHOLD &&
+        now - accelPreviousTime > ACCEL_MIN_INTERVAL_MS
+      ) {
+        accelSteps += 1
+        accelPreviousTime = now
+        onStepsChanged(accelSteps)
+      }
+      accelPreviousMagnitude = magnitude
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
@@ -238,6 +304,7 @@ class AlarmRingingService : Service() {
   override fun onDestroy() {
     sensorManager?.unregisterListener(stepListener)
     sensorManager?.unregisterListener(detectListener)
+    sensorManager?.unregisterListener(accelListener)
     AlarmSoundPlayer.stop()
     vibrator?.cancel()
     AlarmNotificationManager.cancel(applicationContext)

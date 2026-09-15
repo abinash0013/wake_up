@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {Alert, Vibration} from 'react-native';
+import {Alert, AppState, Vibration} from 'react-native';
 import BackgroundTimer from 'react-native-background-timer';
 import useStepCounter from './useStepCounter';
 import {playAlarmSound, stopAlarmSound} from '../services/alarmSound';
@@ -9,6 +9,7 @@ import {
   addStepProgressListener,
   cancelRingingNotification,
   getRingingAlarm,
+  requestActivityRecognitionPermission,
   requestNotificationPermission,
 } from '../services/alarmNotification';
 import {
@@ -25,12 +26,12 @@ const ALARM_VIBRATION_PATTERN = [0, 600, 400, 600, 400];
 
 // Owns the full alarm lifecycle: time-based scheduling, ringing (sound +
 // alert), sequential step progression and stopping.
-const useAlarmEngine = ({alarms, toggleAlarm}) => {
+const useAlarmEngine = ({alarms, toggleAlarm, loaded}) => {
   const [activeAlarmId, setActiveAlarmId] = useState(null);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [stepProgress, setStepProgress] = useState(0);
   const [shouldHideDelete, setShouldHideDelete] = useState(false);
-  const [nativeWalking, setNativeWalking] = useState(false);
+  const [appState, setAppState] = useState(AppState.currentState);
 
   const alarmsRef = useRef(alarms);
   const activeAlarmIdRef = useRef(activeAlarmId);
@@ -60,7 +61,6 @@ const useAlarmEngine = ({alarms, toggleAlarm}) => {
     setActiveStepIndex(0);
     setStepProgress(0);
     setShouldHideDelete(false);
-    setNativeWalking(false);
     ringInProgressRef.current = false;
     console.log('Alarm stopped');
     showToast('Alarm stopped!');
@@ -136,12 +136,17 @@ const useAlarmEngine = ({alarms, toggleAlarm}) => {
     [stopAlarm],
   );
 
+  // Count steps with the accelerometer whenever the React UI is visible and
+  // the active step is a walking step. This is the reliable path (it is what
+  // works in "open state"); the native sensor only becomes the driver when the
+  // app is closed/backgrounded. Native StepProgress events below still stop
+  // the alarm if the native counter reaches the target first.
   useStepCounter({
     active:
+      appState === 'active' &&
       !!activeAlarm &&
       !!activeStep &&
-      activeStep.type === 'steps' &&
-      !nativeWalking,
+      activeStep.type === 'steps',
     threshold: activeStep?.config.threshold,
     minIntervalMs: activeStep?.config.minIntervalMs,
     onStep,
@@ -184,17 +189,17 @@ const useAlarmEngine = ({alarms, toggleAlarm}) => {
       ringInProgressRef.current = true;
       setActiveAlarmId(alarm.id);
       setActiveStepIndex(0);
-      const walking = !!(payload?.walking && payload.walkTarget > 0);
-      setNativeWalking(walking);
       setStepProgress(payload?.walked || 0);
       setShouldHideDelete(true);
       toggleAlarm(alarm.id);
     });
   }, [toggleAlarm]);
 
-  // A walking alarm started natively: reflect the step count in the UI and
-  // stop when the native step counter reaches the target.
-  useEffect(() => {
+  // Native step progress. The JS accelerometer drives the on-screen count while
+// the app is open; native events (which keep counting while the app is closed
+// or backgrounded) are still used to stop the alarm when the native counter
+// reaches the target first.
+useEffect(() => {
     return addStepProgressListener(payload => {
       const alarm = alarmsRef.current.find(
         item => item.id === payload?.id,
@@ -202,7 +207,6 @@ const useAlarmEngine = ({alarms, toggleAlarm}) => {
       if (!alarm || !ringInProgressRef.current) {
         return;
       }
-      setStepProgress(payload.walked || 0);
       if (payload.target > 0 && payload.walked >= payload.target) {
         stopAlarm();
       }
@@ -216,10 +220,22 @@ const useAlarmEngine = ({alarms, toggleAlarm}) => {
     });
   }, [stopAlarm]);
 
-  // When the alarm fired while the app was killed, the AlarmFired event never
-  // reached JS. Re-query the native ringing service on mount and restore the
-  // UI/step-counting state so "Start Walking" works after the app is opened.
+  // Track foreground/background state so the JS accelerometer only runs while
+  // the React UI is visible (native counting takes over when it is not).
   useEffect(() => {
+    const sub = AppState.addEventListener('change', next => setAppState(next));
+    return () => sub.remove();
+  }, []);
+
+  // When the alarm fired while the app was killed, the AlarmFired event never
+  // reached JS. Re-query the native ringing service after the alarms have been
+  // loaded and restore the UI/step-counting state so "Start Walking" works
+  // after the app is opened. Waiting for `loaded` avoids the race where the
+  // persisted alarm list is not ready yet and the sync silently bails.
+  useEffect(() => {
+    if (!loaded) {
+      return undefined;
+    }
     let cancelled = false;
     getRingingAlarm().then(payload => {
       if (cancelled || !payload?.id || ringInProgressRef.current) {
@@ -232,20 +248,21 @@ const useAlarmEngine = ({alarms, toggleAlarm}) => {
       ringInProgressRef.current = true;
       setActiveAlarmId(alarm.id);
       setActiveStepIndex(0);
-      setStepProgress(payload.walked || 0);
-      setNativeWalking(!!(payload.walking && payload.walkTarget > 0));
+      setStepProgress(0);
       setShouldHideDelete(true);
       toggleAlarm(alarm.id);
     });
     return () => {
       cancelled = true;
     };
-  }, [toggleAlarm]);
+  }, [toggleAlarm, loaded]);
 
-  // Ask for notification permission up-front so the native alarm popup can
-  // appear later even when the app is closed.
+  // Ask for the permissions the native alarm surfaces need later even when the
+  // app is closed: notifications for the popup, activity recognition so the
+  // hardware step sensor can feed the ringing service in kill mode.
   useEffect(() => {
     requestNotificationPermission();
+    requestActivityRecognitionPermission();
   }, []);
 
   return {

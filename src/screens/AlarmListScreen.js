@@ -41,7 +41,7 @@ const AlarmListScreen = () => {
     shouldHideDelete,
     isRinging,
     stopAlarm,
-  } = useAlarmEngine({alarms, toggleAlarm});
+  } = useAlarmEngine({alarms, loaded, toggleAlarm});
 
   const [editingAlarm, setEditingAlarm] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);

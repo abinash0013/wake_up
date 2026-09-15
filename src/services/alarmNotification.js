@@ -45,6 +45,28 @@ export const requestNotificationPermission = async () => {
   }
 };
 
+// Ask for ACTIVITY_RECOGNITION (Android 10+) so the hardware step sensor can
+// feed the ringing service in the background / kill mode when present. When it
+// is not granted the native service falls back to the accelerometer, which
+// does not need this permission.
+export const requestActivityRecognitionPermission = async () => {
+  if (
+    Platform.OS !== 'android' ||
+    Number(Platform.Version) < 29 ||
+    !PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION ||
+    AppState.currentState !== 'active'
+  ) {
+    return;
+  }
+  try {
+    await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACTIVITY_RECOGNITION,
+    );
+  } catch (error) {
+    console.warn('Failed to request activity recognition permission', error);
+  }
+};
+
 export const showRingingNotification = async (time = '') =>
   callNative(() => AlarmNotificationManager.showRinging(time || ''));
 
