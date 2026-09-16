@@ -1,6 +1,7 @@
 import React, {useCallback, useState} from 'react';
 import {
   ActivityIndicator,
+  LayoutAnimation,
   Platform,
   FlatList,
   StyleSheet,
@@ -90,6 +91,7 @@ const AlarmListScreen = () => {
         showToast('Alarm with this time already exists!');
         return;
       }
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       addAlarm({time, repeatDays, name, vibrate, sound, steps});
       setCreatingTime(null);
       showToast(`Alarm set for ${time}`);
@@ -111,9 +113,10 @@ const AlarmListScreen = () => {
     showToast('Alarm updated');
   };
 
-  const renderCard = ({item}) => (
+  const renderCard = ({item, index}) => (
     <AlarmCard
       alarm={item}
+      index={index}
       isActive={activeAlarmId === item.id}
       activeStep={activeStep}
       activeStepIndex={activeStepIndex}
@@ -128,7 +131,14 @@ const AlarmListScreen = () => {
 
   return (
     <View style={styles.container}>
-      <AppHeader title="Alarm" subtitle={`${alarms.length} configured`} />
+      <AppHeader
+        title="My Alarms"
+        subtitle={
+          alarms.length > 0
+            ? `${alarms.length} alarm${alarms.length === 1 ? '' : 's'} configured`
+            : 'No alarms yet'
+        }
+      />
 
       <View style={styles.content}>
         {!loaded ? (
@@ -176,8 +186,9 @@ const AlarmListScreen = () => {
         message="This alarm and its steps will be removed permanently."
         confirmLabel="Delete"
         onConfirm={() => {
-          deleteAlarm(deletingAlarmId);
-          setDeletingAlarmId(null);
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        deleteAlarm(deletingAlarmId);
+        setDeletingAlarmId(null);
         }}
         onCancel={() => setDeletingAlarmId(null)}
       />

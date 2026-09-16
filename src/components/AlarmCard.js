@@ -1,5 +1,5 @@
-import React from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import React, {useEffect, useRef} from 'react';
+import {Animated, Easing, StyleSheet, Text, View} from 'react-native';
 import {colors, radii, shadows, spacing, typography} from '../theme';
 import {getEnabledSteps, getStepType} from '../utils/steps';
 import {describeRepeatDays} from '../utils/days';
@@ -49,19 +49,41 @@ const AlarmCard = ({
   activeStepIndex,
   enabledStepsCount,
   stepProgress,
+  index = 0,
 }) => {
   const enabledSteps = getEnabledSteps(alarm);
   const firstStep = enabledSteps[0];
   const stepType = firstStep ? getStepType(firstStep) : null;
   const walkTarget = firstStep ? firstStep.config.target : null;
   const vibrateText = alarm.vibrate ? 'Vibrate on' : 'Vibrate off';
+  const entry = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(entry, {
+      toValue: 1,
+      duration: 420,
+      delay: Math.min(index * 90, 540),
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [entry, index]);
+
+  const entryTranslateY = entry.interpolate({
+    inputRange: [0, 1],
+    outputRange: [32, 0],
+  });
+  const entryScale = entry.interpolate({
+    inputRange: [0.5, 1],
+    outputRange: [0.96, 1],
+  });
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.card,
         !alarm.enabled && styles.cardDisabled,
         isActive && styles.cardActive,
+        {opacity: entry, transform: [{translateY: entryTranslateY}, {scale: entryScale}]},
       ]}>
       <View style={styles.header}>
         <View style={styles.timeBlock}>
@@ -138,7 +160,7 @@ const AlarmCard = ({
           />
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 };
 
