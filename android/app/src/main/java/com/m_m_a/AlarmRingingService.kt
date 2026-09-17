@@ -1,4 +1,4 @@
-package com.m_m_a
+package com.nosnooze
 
 import android.app.NotificationManager
 import android.app.Service
@@ -29,9 +29,9 @@ class AlarmRingingService : Service() {
   companion object {
     private const val TAG = "AlarmRingingService"
 
-    const val ACTION_STOP = "com.m_m_a.action.STOP_RINGING"
-    const val ACTION_STEP_PROGRESS = "com.m_m_a.action.STEP_PROGRESS"
-    const val ACTION_STOPPED = "com.m_m_a.action.ALARM_STOPPED"
+    const val ACTION_STOP = "com.nosnooze.action.STOP_RINGING"
+    const val ACTION_STEP_PROGRESS = "com.nosnooze.action.STEP_PROGRESS"
+    const val ACTION_STOPPED = "com.nosnooze.action.ALARM_STOPPED"
     const val EXTRA_ALARM_ID = "alarm_id"
     const val EXTRA_WALKED = "walked"
     const val EXTRA_TARGET = "target"

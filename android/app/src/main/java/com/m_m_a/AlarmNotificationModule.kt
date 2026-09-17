@@ -1,4 +1,4 @@
-package com.m_m_a
+package com.nosnooze
 
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise

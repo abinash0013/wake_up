@@ -77,9 +77,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.m_m_a"
+    namespace "com.nosnooze"
     defaultConfig {
-        applicationId "com.m_m_a"
+        applicationId "com.nosnooze"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
@@ -91,6 +91,14 @@ android {
             storePassword 'android'
             keyAlias 'androiddebugkey'
             keyPassword 'android'
+        }
+         release {
+            if (project.hasProperty('MYAPP_UPLOAD_STORE_FILE')) {
+                storeFile file(MYAPP_UPLOAD_STORE_FILE)
+                storePassword MYAPP_UPLOAD_STORE_PASSWORD
+                keyAlias MYAPP_UPLOAD_KEY_ALIAS
+                keyPassword MYAPP_UPLOAD_KEY_PASSWORD
+            }
         }
         // release {
         //     // storeFile file MYAPP_RELEASE_STORE_FILE // path to your keystore
@@ -108,8 +116,8 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
-            // signingConfig signingConfigs.release
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
+            // signingConfig signingConfigs.debug
             // Enable Proguard for release builds (if required)
             minifyEnabled true // to shrink and obfuscate code
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro' // Proguard rules

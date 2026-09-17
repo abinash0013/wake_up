@@ -1,4 +1,4 @@
-package com.m_m_a
+package com.nosnooze
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

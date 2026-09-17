@@ -1,4 +1,4 @@
-package com.m_m_a
+package com.nosnooze
 
 import android.app.AlarmManager
 import android.app.PendingIntent
@@ -15,7 +15,7 @@ import java.util.Calendar
 // re-armed after a reboot even before the app process is started.
 object AlarmScheduler {
 
-  const val ACTION_FIRE = "com.m_m_a.action.ALARM_FIRE"
+  const val ACTION_FIRE = "com.nosnooze.action.ALARM_FIRE"
   const val EXTRA_ALARM_JSON = "alarm_json"
 
   private const val PREFS = "alarm_scheduler"
