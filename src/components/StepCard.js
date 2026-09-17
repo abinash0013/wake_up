@@ -24,7 +24,7 @@ const StepCard = ({
     <View style={[styles.card, !step.enabled && styles.cardDisabled]}>
       <View style={styles.header}>
         <View style={styles.iconWrap}>
-          <Text style={styles.icon}>{type.icon}</Text>
+          <Icon name={type.icon} size={18} color={colors.primary} />
         </View>
         <View style={styles.info}>
           <Text style={styles.label}>
@@ -100,9 +100,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryLight,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  icon: {
-    fontSize: 18,
   },
   info: {
     flex: 1,

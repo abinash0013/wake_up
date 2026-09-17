@@ -24,6 +24,11 @@ import {showToast} from '../utils/toast';
 // wait, vibrate, wait, vibrate... repeated while ringing.
 const ALARM_VIBRATION_PATTERN = [0, 600, 400, 600, 400];
 
+// After "Start Walking" the alarm stays silent while steps keep incrementing.
+// If no new step is detected for this long, the alarm rings again to nudge
+// the user to keep moving (and goes silent again when they resume).
+const STEP_IDLE_TIMEOUT_MS = 10000;
+
 // Owns the full alarm lifecycle: time-based scheduling, ringing (sound +
 // alert), sequential step progression and stopping.
 const useAlarmEngine = ({alarms, toggleAlarm, loaded}) => {
@@ -32,15 +37,22 @@ const useAlarmEngine = ({alarms, toggleAlarm, loaded}) => {
   const [stepProgress, setStepProgress] = useState(0);
   const [shouldHideDelete, setShouldHideDelete] = useState(false);
   const [appState, setAppState] = useState(AppState.currentState);
+  const [isWalking, setIsWalking] = useState(false);
+  const [stepWarning, setStepWarning] = useState(null);
 
   const alarmsRef = useRef(alarms);
   const activeAlarmIdRef = useRef(activeAlarmId);
   const activeStepIndexRef = useRef(activeStepIndex);
   const ringInProgressRef = useRef(false);
+  const isWalkingRef = useRef(false);
+  const walkTimerRef = useRef(null);
+  const appStateRef = useRef(appState);
 
   alarmsRef.current = alarms;
   activeAlarmIdRef.current = activeAlarmId;
   activeStepIndexRef.current = activeStepIndex;
+  isWalkingRef.current = isWalking;
+  appStateRef.current = appState;
 
   const activeAlarm = activeAlarmId
     ? alarms.find(alarm => alarm.id === activeAlarmId)
@@ -49,11 +61,21 @@ const useAlarmEngine = ({alarms, toggleAlarm, loaded}) => {
   const enabledSteps = activeAlarm ? getEnabledSteps(activeAlarm) : [];
   const activeStep = enabledSteps[activeStepIndex] || null;
 
+  const clearWalkTimer = useCallback(() => {
+    if (walkTimerRef.current) {
+      clearTimeout(walkTimerRef.current);
+      walkTimerRef.current = null;
+    }
+  }, []);
+
   const stopAlarm = useCallback(async () => {
     if (!activeAlarmIdRef.current) {
       return;
     }
     Vibration.cancel();
+    clearWalkTimer();
+    setIsWalking(false);
+    setStepWarning(null);
     await stopAlarmSound();
     cancelRingingNotification();
     stopRingingService();
@@ -64,7 +86,65 @@ const useAlarmEngine = ({alarms, toggleAlarm, loaded}) => {
     ringInProgressRef.current = false;
     console.log('Alarm stopped');
     showToast('Alarm stopped!');
+  }, [clearWalkTimer]);
+
+  const silenceAlarm = useCallback(async () => {
+    Vibration.cancel();
+    try {
+      await stopAlarmSound();
+    } catch (error) {
+      console.warn('Failed to silence alarm sound', error);
+    }
   }, []);
+
+  const resumeAlarmRinging = useCallback(async () => {
+    clearWalkTimer();
+    if (!activeAlarmIdRef.current || appStateRef.current !== 'active') {
+      return;
+    }
+    const alarm = alarmsRef.current.find(
+      item => item.id === activeAlarmIdRef.current,
+    );
+    if (!alarm) {
+      return;
+    }
+    setIsWalking(false);
+    setStepWarning('Step count stopped — keep walking!');
+    if (alarm.vibrate) {
+      Vibration.vibrate(ALARM_VIBRATION_PATTERN, true);
+    }
+    try {
+      await playAlarmSound(alarm.sound?.uri);
+    } catch (error) {
+      console.warn('Failed to resume alarm sound', error);
+    }
+  }, [clearWalkTimer]);
+
+  const scheduleIdleCheck = useCallback(() => {
+    clearWalkTimer();
+    if (appStateRef.current !== 'active' || !isWalkingRef.current) {
+      return undefined;
+    }
+    walkTimerRef.current = setTimeout(() => {
+      walkTimerRef.current = null;
+      if (!activeAlarmIdRef.current || !isWalkingRef.current) {
+        return;
+      }
+      resumeAlarmRinging();
+    }, STEP_IDLE_TIMEOUT_MS);
+    return undefined;
+  }, [clearWalkTimer, resumeAlarmRinging]);
+
+  const startWalking = useCallback(async () => {
+    if (!activeAlarmIdRef.current) {
+      return;
+    }
+    setIsWalking(true);
+    setStepWarning(null);
+    await silenceAlarm();
+    showToast('Alarm muted — keep walking!');
+    scheduleIdleCheck();
+  }, [silenceAlarm, scheduleIdleCheck]);
 
   const ringAlarm = useCallback(
     async alarm => {
@@ -72,6 +152,9 @@ const useAlarmEngine = ({alarms, toggleAlarm, loaded}) => {
         return; // Prevent multiple simultaneous alarms
       }
       ringInProgressRef.current = true;
+      clearWalkTimer();
+      setIsWalking(false);
+      setStepWarning(null);
 
       setActiveAlarmId(alarm.id);
       setActiveStepIndex(0);
@@ -99,11 +182,19 @@ const useAlarmEngine = ({alarms, toggleAlarm, loaded}) => {
             showToast(
               `You need ${remainingSteps} more steps to stop the alarm!`,
             );
+            startWalking();
+          },
+        },
+        {
+          text: 'Stop',
+          style: 'cancel',
+          onPress: () => {
+            stopAlarm();
           },
         },
       ]);
     },
-    [toggleAlarm],
+    [toggleAlarm, clearWalkTimer, startWalking, stopAlarm],
   );
 
   const onStep = useCallback(
@@ -120,6 +211,14 @@ const useAlarmEngine = ({alarms, toggleAlarm, loaded}) => {
         stopAlarm();
         return;
       }
+      // Any detected movement silences the alarm and re-arms the idle nudge.
+      if (!isWalkingRef.current) {
+        setIsWalking(true);
+        setStepWarning(null);
+        Vibration.cancel();
+        stopAlarmSound();
+      }
+      scheduleIdleCheck();
       if (count >= currentStep.config.target) {
         const nextIndex = activeStepIndexRef.current + 1;
         if (nextIndex < steps.length) {
@@ -133,7 +232,7 @@ const useAlarmEngine = ({alarms, toggleAlarm, loaded}) => {
         setStepProgress(count);
       }
     },
-    [stopAlarm],
+    [stopAlarm, scheduleIdleCheck],
   );
 
   // Count steps with the accelerometer whenever the React UI is visible and
@@ -187,13 +286,16 @@ const useAlarmEngine = ({alarms, toggleAlarm, loaded}) => {
         return;
       }
       ringInProgressRef.current = true;
+      clearWalkTimer();
+      setIsWalking(false);
+      setStepWarning(null);
       setActiveAlarmId(alarm.id);
       setActiveStepIndex(0);
       setStepProgress(payload?.walked || 0);
       setShouldHideDelete(true);
       toggleAlarm(alarm.id);
     });
-  }, [toggleAlarm]);
+  }, [toggleAlarm, clearWalkTimer]);
 
   // Native step progress. The JS accelerometer drives the on-screen count while
 // the app is open; native events (which keep counting while the app is closed
@@ -223,9 +325,14 @@ useEffect(() => {
   // Track foreground/background state so the JS accelerometer only runs while
   // the React UI is visible (native counting takes over when it is not).
   useEffect(() => {
-    const sub = AppState.addEventListener('change', next => setAppState(next));
+    const sub = AppState.addEventListener('change', next => {
+      setAppState(next);
+      if (next !== 'active') {
+        clearWalkTimer();
+      }
+    });
     return () => sub.remove();
-  }, []);
+  }, [clearWalkTimer]);
 
   // When the alarm fired while the app was killed, the AlarmFired event never
   // reached JS. Re-query the native ringing service after the alarms have been
@@ -246,6 +353,9 @@ useEffect(() => {
         return;
       }
       ringInProgressRef.current = true;
+      clearWalkTimer();
+      setIsWalking(false);
+      setStepWarning(null);
       setActiveAlarmId(alarm.id);
       setActiveStepIndex(0);
       setStepProgress(0);
@@ -255,7 +365,7 @@ useEffect(() => {
     return () => {
       cancelled = true;
     };
-  }, [toggleAlarm, loaded]);
+  }, [toggleAlarm, loaded, clearWalkTimer]);
 
   // Ask for the permissions the native alarm surfaces need later even when the
   // app is closed: notifications for the popup, activity recognition so the
@@ -274,6 +384,9 @@ useEffect(() => {
     stepProgress,
     shouldHideDelete,
     isRinging: activeAlarmId !== null,
+    isWalking,
+    stepWarning,
+    startWalking,
     ringAlarm,
     stopAlarm,
   };

@@ -41,6 +41,9 @@ const AlarmListScreen = () => {
     stepProgress,
     shouldHideDelete,
     isRinging,
+    isWalking,
+    stepWarning,
+    startWalking,
     stopAlarm,
   } = useAlarmEngine({alarms, loaded, toggleAlarm});
 
@@ -200,6 +203,9 @@ const AlarmListScreen = () => {
           activeStepIndex={activeStepIndex}
           enabledStepsCount={enabledStepsCount}
           stepProgress={stepProgress}
+          isWalking={isWalking}
+          stepWarning={stepWarning}
+          onStartWalking={startWalking}
           onStop={stopAlarm}
         />
       )}

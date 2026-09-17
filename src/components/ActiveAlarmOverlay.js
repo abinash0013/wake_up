@@ -12,17 +12,38 @@ const ActiveAlarmOverlay = ({
   activeStepIndex = 0,
   enabledStepsCount = 0,
   stepProgress = 0,
+  isWalking = false,
+  stepWarning = null,
   onStop,
+  onStartWalking,
 }) => {
   const target = activeStep?.config.target || 0;
   const type = activeStep ? getStepType(activeStep) : null;
   const percent = target > 0 ? Math.min(stepProgress / target, 1) : 0;
 
+  const status = stepWarning
+    ? {label: 'Keep Moving!', tone: 'warning'}
+    : isWalking
+    ? {label: 'Walking', tone: 'active'}
+    : {label: 'Ringing', tone: 'ringing'};
+
+  const accentColor = stepWarning
+    ? colors.warning
+    : isWalking
+    ? colors.success
+    : colors.danger;
+
+  const buttonTitle = stepWarning
+    ? 'Resume Walking'
+    : isWalking
+    ? 'Walking…'
+    : 'Start Walking';
+
   return (
     <View pointerEvents="box-none" style={styles.wrapper}>
-      <View style={styles.banner}>
+      <View style={[styles.banner, {borderLeftColor: accentColor}]}>
         <View style={styles.header}>
-          <StatusBadge label="Ringing" tone="ringing" />
+          <StatusBadge label={status.label} tone={status.tone} />
           <Text style={styles.time}>{activeAlarm?.time}</Text>
         </View>
 
@@ -39,9 +60,18 @@ const ActiveAlarmOverlay = ({
             </View>
             <View style={styles.track}>
               <View
-                style={[styles.fill, {width: `${Math.round(percent * 100)}%`}]}
+                style={[
+                  styles.fill,
+                  {
+                    width: `${Math.round(percent * 100)}%`,
+                    backgroundColor: accentColor,
+                  },
+                ]}
               />
             </View>
+            {stepWarning ? (
+              <Text style={styles.warning}>{stepWarning}</Text>
+            ) : null}
           </View>
         ) : (
           <Text style={styles.noStep}>
@@ -50,17 +80,30 @@ const ActiveAlarmOverlay = ({
         )}
 
         <AppButton
-          title={activeStep ? 'Start Walking' : 'Stop Alarm'}
-          variant={activeStep ? 'primary' : 'danger'}
+          title={activeStep ? buttonTitle : 'Stop Alarm'}
+          variant="primary"
           onPress={() => {
             if (activeStep) {
-              showToast(`Walk ${target} steps to dismiss the alarm!`);
+              if (onStartWalking) {
+                onStartWalking();
+              } else {
+                showToast(`Walk ${target} steps to dismiss the alarm!`);
+              }
             } else {
               onStop();
             }
           }}
           style={styles.stopButton}
         />
+
+        {activeStep ? (
+          <AppButton
+            title="Stop Alarm"
+            variant="danger"
+            onPress={onStop}
+            style={styles.ghostButton}
+          />
+        ) : null}
       </View>
     </View>
   );
@@ -124,8 +167,16 @@ const styles = StyleSheet.create({
     color: colors.warning,
     marginTop: spacing.lg,
   },
+  warning: {
+    ...typography.caption,
+    color: colors.warning,
+    marginTop: spacing.sm,
+  },
   stopButton: {
     marginTop: spacing.lg,
+  },
+  ghostButton: {
+    marginTop: spacing.sm,
   },
 });
 

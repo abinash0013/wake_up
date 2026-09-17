@@ -9,7 +9,7 @@ export const STEP_TYPES = {
     key: 'steps',
     label: 'Walk Steps',
     description: 'Walk a set number of steps to satisfy this step.',
-    icon: '👣',
+    icon: 'Footprints',
     defaultConfig: {
       target: STEP_TARGET_DEFAULT,
       threshold: STEP_THRESHOLD_DEFAULT,

@@ -83,7 +83,10 @@ const AlarmCard = ({
         styles.card,
         !alarm.enabled && styles.cardDisabled,
         isActive && styles.cardActive,
-        {opacity: entry, transform: [{translateY: entryTranslateY}, {scale: entryScale}]},
+        {
+          opacity: entry,
+          transform: [{translateY: entryTranslateY}, {scale: entryScale}],
+        },
       ]}>
       <View style={styles.header}>
         <View style={styles.timeBlock}>
@@ -219,6 +222,7 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.md,
     marginTop: spacing.md,
     backgroundColor: colors.surfaceLighter,
